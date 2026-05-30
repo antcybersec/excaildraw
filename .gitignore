@@ -1,0 +1,12 @@
+/target
+**/target
+/dist
+**/.trunk
+Cargo.lock
+.env
+.env.*
+*.swp
+*.swo
+.DS_Store
+.idea/
+.vscode/
