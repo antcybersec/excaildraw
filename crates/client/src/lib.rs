@@ -1,7 +1,9 @@
 mod app;
 mod canvas;
 mod collab;
+mod crypto;
 mod editor;
+mod storage;
 mod viewport;
 
 use app::App;

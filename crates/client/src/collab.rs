@@ -1,3 +1,4 @@
+use crate::crypto::RoomCipher;
 use excaildraw_core::{ClientMessage, Element, ServerMessage};
 use gloo::timers::callback::Timeout;
 use std::cell::RefCell;
@@ -8,8 +9,22 @@ use web_sys::{MessageEvent, WebSocket};
 
 const API_BASE: &str = "http://127.0.0.1:8080";
 
+thread_local! {
+    static AUTH_TOKEN: RefCell<Option<String>> = const { RefCell::new(None) };
+    static ROOM_CIPHER: RefCell<Option<RoomCipher>> = const { RefCell::new(None) };
+    static COLLAB: RefCell<Option<CollabHandle>> = const { RefCell::new(None) };
+}
+
 pub struct CollabHandle {
     ws: WebSocket,
+}
+
+pub fn set_auth_token(token: Option<String>) {
+    AUTH_TOKEN.with(|t| *t.borrow_mut() = token);
+}
+
+pub fn set_room_cipher(cipher: Option<RoomCipher>) {
+    ROOM_CIPHER.with(|c| *c.borrow_mut() = cipher);
 }
 
 impl CollabHandle {
@@ -31,9 +46,10 @@ impl CollabHandle {
                 user: user_join.clone(),
                 color: color.clone(),
             };
-            if let Ok(json) = serde_json::to_string(&join) {
-                let _ = onopen_ws.send_with_str(&json);
-            }
+            send_json(&onopen_ws, &join);
+            wasm_bindgen_futures::spawn_local(async {
+                flush_offline_queue().await;
+            });
         });
         ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
         onopen.forget();
@@ -48,6 +64,19 @@ impl CollabHandle {
                         }
                         ServerMessage::Cursor { user, x, y, color } => {
                             on_cursor(user, x, y, color);
+                        }
+                        ServerMessage::Encrypted { payload } => {
+                            ROOM_CIPHER.with(|c| {
+                                if let Some(cipher) = c.borrow().as_ref() {
+                                    if let Ok(inner) = cipher.decrypt(&payload) {
+                                        if let Ok(ServerMessage::Sync { elements }) =
+                                            serde_json::from_str::<ServerMessage>(&inner)
+                                        {
+                                            on_sync(elements);
+                                        }
+                                    }
+                                }
+                            });
                         }
                         ServerMessage::Error { .. } => {}
                     }
@@ -64,9 +93,10 @@ impl CollabHandle {
         let msg = ClientMessage::Update {
             elements: elements.to_vec(),
         };
-        if let Ok(json) = serde_json::to_string(&msg) {
-            let _ = self.ws.send_with_str(&json);
+        if try_send_encrypted(&self.ws, &msg) {
+            return;
         }
+        send_json(&self.ws, &msg);
     }
 
     pub fn send_cursor(&self, user: &str, x: f64, y: f64) {
@@ -77,14 +107,37 @@ impl CollabHandle {
             y,
             color,
         };
-        if let Ok(json) = serde_json::to_string(&msg) {
-            let _ = self.ws.send_with_str(&json);
-        }
+        send_json(&self.ws, &msg);
     }
 }
 
-thread_local! {
-    static COLLAB: RefCell<Option<CollabHandle>> = const { RefCell::new(None) };
+fn try_send_encrypted(ws: &WebSocket, msg: &ClientMessage) -> bool {
+    ROOM_CIPHER.with(|c| {
+        if let Some(cipher) = c.borrow().as_ref() {
+            if let Ok(json) = serde_json::to_string(msg) {
+                if let Ok(payload) = cipher.encrypt(&json) {
+                    let enc = ClientMessage::Encrypted { payload };
+                    send_json(ws, &enc);
+                    return true;
+                }
+            }
+        }
+        false
+    })
+}
+
+fn send_json(ws: &WebSocket, msg: &impl serde::Serialize) {
+    if ws.ready_state() == WebSocket::OPEN {
+        if let Ok(json) = serde_json::to_string(msg) {
+            let _ = ws.send_with_str(&json);
+            return;
+        }
+    }
+    if let Ok(json) = serde_json::to_string(msg) {
+        wasm_bindgen_futures::spawn_local(async move {
+            crate::storage::queue_update(&json).await;
+        });
+    }
 }
 
 pub fn set_collab(handle: CollabHandle) {
@@ -99,13 +152,38 @@ pub fn with_collab(f: impl FnOnce(&CollabHandle)) {
     });
 }
 
+async fn flush_offline_queue() {
+    let pending = crate::storage::drain_queue().await;
+    COLLAB.with(|c| {
+        if let Some(h) = c.borrow().as_ref() {
+            for json in pending {
+                let _ = h.ws.send_with_str(&json);
+            }
+        }
+    });
+}
+
 pub async fn create_room() -> Option<String> {
-    let resp = gloo_net::http::Request::post(&format!("{API_BASE}/api/rooms"))
+    let token = AUTH_TOKEN.with(|t| t.borrow().clone());
+    let mut builder = gloo_net::http::Request::post(&format!("{API_BASE}/api/rooms"));
+    if let Some(token) = token {
+        builder = builder.header("Authorization", &format!("Bearer {token}"));
+    }
+    let resp = builder.send().await.ok()?;
+    let json: serde_json::Value = resp.json().await.ok()?;
+    json["id"].as_str().map(str::to_string)
+}
+
+pub async fn fetch_auth_token(username: &str) -> Option<String> {
+    let resp = gloo_net::http::Request::post(&format!("{API_BASE}/api/auth/token"))
+        .header("Content-Type", "application/json")
+        .body(serde_json::json!({ "username": username }).to_string())
+        .ok()?
         .send()
         .await
         .ok()?;
     let json: serde_json::Value = resp.json().await.ok()?;
-    json["id"].as_str().map(str::to_string)
+    json["token"].as_str().map(str::to_string)
 }
 
 pub fn throttle_cursor(user: &str, x: f64, y: f64) {
@@ -160,4 +238,10 @@ pub fn download_data_url(filename: &str, data_url: &str) {
     a.set_download(filename);
     a.set_href(data_url);
     a.click();
+}
+
+pub fn persist_scene(json: String) {
+    wasm_bindgen_futures::spawn_local(async move {
+        crate::storage::save_scene(&json).await;
+    });
 }

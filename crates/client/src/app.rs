@@ -1,21 +1,34 @@
 use crate::canvas::render_scene;
 use crate::collab::{
-    create_room, download_data_url, download_file, export_png, set_collab, throttle_cursor,
-    with_collab, CollabHandle,
+    create_room, download_data_url, download_file, export_png, fetch_auth_token, persist_scene,
+    set_auth_token, set_collab, set_room_cipher, throttle_cursor, with_collab, CollabHandle,
 };
+use crate::crypto::RoomCipher;
 use crate::editor::{Editor, Tool};
 use crate::viewport::Viewport;
 use excaildraw_core::{Element, ElementType, ExcalidrawFile, to_svg};
 use gloo::events::EventListener;
+use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlInputElement, KeyboardEvent, MouseEvent, WheelEvent};
 use yew::prelude::*;
 
+fn sync_and_persist(editor: &Rc<RefCell<Editor>>) {
+    let ed = editor.borrow();
+    let mut file = ExcalidrawFile::new(ed.elements.clone());
+    file.files = ed.files.clone();
+    if let Ok(json) = file.to_json_pretty() {
+        persist_scene(json);
+    }
+    with_collab(|h| h.send_update(&ed.elements));
+}
+
 #[function_component(App)]
 pub fn app() -> Html {
     let canvas_ref = use_node_ref();
     let file_input_ref = use_node_ref();
+    let image_input_ref = use_node_ref();
     let viewport = use_mut_ref(Viewport::default);
     let editor = use_mut_ref(Editor::default);
     let tool = use_state(|| Tool::Select);
@@ -28,6 +41,8 @@ pub fn app() -> Html {
     let username = use_state(|| format!("User-{}", &uuid::Uuid::new_v4().to_string()[..4]));
     let frame = use_state(|| 0u32);
     let status = use_state(String::new);
+    let room_password = use_state(String::new);
+    let layers_open = use_state(|| true);
 
     let bump_frame = {
         let frame = frame.clone();
@@ -56,18 +71,41 @@ pub fn app() -> Html {
                     let ed = editor.borrow();
                     let prev = preview.borrow();
                     let collab = collaborators.borrow();
+                    let selected: Vec<String> = ed.selected.iter().cloned().collect();
                     render_scene(
                         &ctx,
                         &viewport.borrow(),
                         width,
                         height,
                         &ed.elements,
+                        &ed.files,
                         prev.as_ref(),
-                        ed.selected.as_deref(),
+                        &selected,
                         &collab,
                     );
                 }
             }
+            || ()
+        });
+    }
+
+    {
+        let editor = editor.clone();
+        let bump_frame = bump_frame.clone();
+        use_effect_with((), move |_| {
+            wasm_bindgen_futures::spawn_local(async move {
+                if let Some(json) = crate::storage::load_scene().await {
+                    if let Ok(parsed) = ExcalidrawFile::from_json(&json) {
+                        editor.borrow_mut().load_scene(parsed.elements, parsed.files);
+                        bump_frame();
+                    }
+                }
+            });
+            wasm_bindgen_futures::spawn_local(async move {
+                if let Some(token) = fetch_auth_token("guest").await {
+                    set_auth_token(Some(token));
+                }
+            });
             || ()
         });
     }
@@ -184,6 +222,7 @@ pub fn app() -> Html {
         let editor = editor.clone();
         let bump_frame = bump_frame.clone();
         let username = username.clone();
+        let image_input_ref = image_input_ref.clone();
         Callback::from(move |e: MouseEvent| {
             let Some((wx, wy)) = (|| {
                 let rect = canvas_ref.cast::<HtmlCanvasElement>()?.get_bounding_client_rect();
@@ -202,7 +241,7 @@ pub fn app() -> Html {
 
             match *tool {
                 Tool::Select => {
-                    editor.borrow_mut().start_drag(wx, wy);
+                    editor.borrow_mut().start_drag(wx, wy, e.shift_key() || e.meta_key());
                 }
                 Tool::Rectangle => {
                     *drawing.borrow_mut() = Some((wx, wy));
@@ -239,8 +278,15 @@ pub fn app() -> Html {
                             el.font_size = Some(20.0);
                             el.bump_version();
                             editor.borrow_mut().push_element(el);
-                            with_collab(|h| h.send_update(&editor.borrow().elements));
+                            sync_and_persist(&editor);
+                            bump_frame();
                         }
+                    }
+                }
+                Tool::Image => {
+                    *drawing.borrow_mut() = Some((wx, wy));
+                    if let Some(input) = image_input_ref.cast::<HtmlInputElement>() {
+                        input.click();
                     }
                 }
             }
@@ -330,7 +376,7 @@ pub fn app() -> Html {
             }
             if editor.borrow().dragging.is_some() {
                 editor.borrow_mut().end_drag();
-                with_collab(|h| h.send_update(&editor.borrow().elements));
+                sync_and_persist(&editor);
                 bump_frame();
                 return;
             }
@@ -341,7 +387,7 @@ pub fn app() -> Html {
                 if valid {
                     el.bump_version();
                     editor.borrow_mut().push_element(el);
-                    with_collab(|h| h.send_update(&editor.borrow().elements));
+                    sync_and_persist(&editor);
                 }
             }
             drawing.borrow_mut().take();
@@ -416,11 +462,59 @@ pub fn app() -> Html {
                     let blob = gloo_file::Blob::from(file);
                     if let Ok(text) = gloo_file::futures::read_as_text(&blob).await {
                         if let Ok(parsed) = ExcalidrawFile::from_json(&text) {
-                            editor.borrow_mut().set_elements(parsed.elements);
+                            editor.borrow_mut().load_scene(parsed.elements, parsed.files);
                             bump();
                         }
                     }
                 });
+            }
+        })
+    };
+
+    let on_image_change = {
+        let editor = editor.clone();
+        let bump_frame = bump_frame.clone();
+        let drawing = drawing.clone();
+        Callback::from(move |e: Event| {
+            let input: HtmlInputElement = e.target_unchecked_into();
+            if let Some(file) = input.files().and_then(|f| f.get(0)) {
+                let editor = editor.clone();
+                let bump = bump_frame.clone();
+                let pos = drawing.borrow().unwrap_or((100.0, 100.0));
+                drawing.borrow_mut().take();
+                wasm_bindgen_futures::spawn_local(async move {
+                    let blob = gloo_file::Blob::from(file);
+                    if let Ok(data_url) = gloo_file::futures::read_as_data_url(&blob).await {
+                        let file_id = uuid::Uuid::new_v4().to_string();
+                        let meta = serde_json::json!({
+                            "mimeType": "image/png",
+                            "id": file_id,
+                            "dataURL": data_url,
+                            "created": js_sys::Date::now() as u64
+                        });
+                        let mut el = Element::new(ElementType::Image, pos.0, pos.1, 240.0, 180.0);
+                        el.file_id = Some(file_id.clone());
+                        el.bump_version();
+                        editor.borrow_mut().add_file(file_id, meta);
+                        editor.borrow_mut().push_element(el);
+                        sync_and_persist(&editor);
+                        bump();
+                    }
+                });
+            }
+        })
+    };
+
+    let on_password_change = {
+        let room_password = room_password.clone();
+        let room_id = room_id.clone();
+        Callback::from(move |e: InputEvent| {
+            let input: HtmlInputElement = e.target_unchecked_into();
+            room_password.set(input.value());
+            if !room_id.is_empty() && !input.value().is_empty() {
+                set_room_cipher(Some(RoomCipher::from_password(&input.value(), &room_id)));
+            } else {
+                set_room_cipher(None);
             }
         })
     };
@@ -475,6 +569,51 @@ pub fn app() -> Html {
         })
     };
 
+    let layer_items = editor.borrow().layer_list();
+    let selected_layers = editor.borrow().selected.clone();
+
+    let on_layer_select = {
+        let editor = editor.clone();
+        let bump_frame = bump_frame.clone();
+        move |id: String| {
+            let editor = editor.clone();
+            let bump = bump_frame.clone();
+            Callback::from(move |_| {
+                editor.borrow_mut().selected.clear();
+                editor.borrow_mut().selected.insert(id.clone());
+                bump();
+            })
+        }
+    };
+
+    let on_layer_up = {
+        let editor = editor.clone();
+        let bump_frame = bump_frame.clone();
+        move |id: String| {
+            let editor = editor.clone();
+            let bump = bump_frame.clone();
+            Callback::from(move |_| {
+                editor.borrow_mut().move_layer(&id, -1);
+                sync_and_persist(&editor);
+                bump();
+            })
+        }
+    };
+
+    let on_layer_down = {
+        let editor = editor.clone();
+        let bump_frame = bump_frame.clone();
+        move |id: String| {
+            let editor = editor.clone();
+            let bump = bump_frame.clone();
+            Callback::from(move |_| {
+                editor.borrow_mut().move_layer(&id, 1);
+                sync_and_persist(&editor);
+                bump();
+            })
+        }
+    };
+
     html! {
         <div class="app">
             <header class="toolbar">
@@ -494,6 +633,8 @@ pub fn app() -> Html {
                         onclick={set_tool(Tool::Freedraw)}>{"✎"}</button>
                     <button class={classes!("tool-btn", (*tool == Tool::Text).then_some("active"))}
                         onclick={set_tool(Tool::Text)}>{"T"}</button>
+                    <button class={classes!("tool-btn", (*tool == Tool::Image).then_some("active"))}
+                        onclick={set_tool(Tool::Image)}>{"🖼"}</button>
                 </div>
                 <div class="tool-group">
                     <button class="tool-btn" onclick={on_undo}>{"Undo"}</button>
@@ -505,20 +646,41 @@ pub fn app() -> Html {
                     <button class="tool-btn" onclick={on_export_svg}>{"SVG"}</button>
                     <button class="tool-btn" onclick={on_export_png}>{"PNG"}</button>
                 </div>
+                <input type="password" class="room-pass" placeholder="E2E password" oninput={on_password_change} />
                 <button class="tool-btn primary" onclick={on_create_room}>{"New Room"}</button>
                 <span class="status">{(*status).clone()}</span>
-                <span class="hint">{"Scroll zoom · Shift+pan · Del delete · Ctrl+Z undo"}</span>
+                <span class="hint">{"Shift+click multi-select · Meta+click add"}</span>
             </header>
+            <div class="main">
+                if *layers_open {
+                    <aside class="layers">
+                        <div class="layers-head">{"Layers"}</div>
+                        { for layer_items.iter().rev().map(|(id, label)| {
+                            let id_up = id.clone();
+                            let id_down = id.clone();
+                            let id_sel = id.clone();
+                            html! {
+                                <div class={classes!("layer-row", selected_layers.contains(id).then_some("active"))}>
+                                    <button class="layer-name" onclick={on_layer_select(id_sel)}>{label}</button>
+                                    <button class="layer-btn" onclick={on_layer_up(id_up)}>{"↑"}</button>
+                                    <button class="layer-btn" onclick={on_layer_down(id_down)}>{"↓"}</button>
+                                </div>
+                            }
+                        }) }
+                    </aside>
+                }
+                <canvas
+                    ref={canvas_ref}
+                    class="canvas"
+                    onwheel={on_wheel}
+                    onmousedown={on_mouse_down}
+                    onmousemove={on_mouse_move}
+                    onmouseup={on_mouse_up.clone()}
+                    onmouseleave={on_mouse_up}
+                />
+            </div>
             <input type="file" accept=".excalidraw,.json" class="hidden-input" ref={file_input_ref} onchange={on_file_change} />
-            <canvas
-                ref={canvas_ref}
-                class="canvas"
-                onwheel={on_wheel}
-                onmousedown={on_mouse_down}
-                onmousemove={on_mouse_move}
-                onmouseup={on_mouse_up.clone()}
-                onmouseleave={on_mouse_up}
-            />
+            <input type="file" accept="image/*" class="hidden-input" ref={image_input_ref} onchange={on_image_change} />
         </div>
     }
 }
