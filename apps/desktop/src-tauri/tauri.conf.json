@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "excaildraw",
+  "version": "0.1.0",
+  "identifier": "app.excaildraw.desktop",
+  "build": {
+    "frontendDist": "../../../dist",
+    "devUrl": "http://127.0.0.1:3000",
+    "beforeDevCommand": "cd ../../../crates/client && trunk serve --port 3000",
+    "beforeBuildCommand": "cd ../../../crates/client && trunk build --release"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "excaildraw",
+        "width": 1280,
+        "height": 800,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "icon": []
+  }
+}

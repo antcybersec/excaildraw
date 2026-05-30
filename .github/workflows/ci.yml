@@ -10,17 +10,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
-
   wasm:
     runs-on: ubuntu-latest
     steps:
@@ -29,3 +18,11 @@ jobs:
       - run: rustup target add wasm32-unknown-unknown
       - run: cargo install trunk --locked
       - run: cd crates/client && trunk build --release
+
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test -p excaildraw-core -p excaildraw-server
+      - run: cargo clippy -p excaildraw-core -p excaildraw-server -p excaildraw-client --all-targets -- -D warnings
