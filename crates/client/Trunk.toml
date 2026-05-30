@@ -5,3 +5,7 @@ public_url = "/"
 
 [watch]
 watch = ["src", "index.html"]
+
+[serve]
+port = 3000
+addresses = ["127.0.0.1"]

@@ -1,5 +1,7 @@
 mod app;
 mod canvas;
+mod collab;
+mod editor;
 mod viewport;
 
 use app::App;

@@ -14,6 +14,8 @@ excaildraw-core = { path = "../core" }
 yew = { version = "0.21", features = ["csr"] }
 gloo = "0.11"
 gloo-events = "0.2"
+gloo-net = "0.5"
+gloo-timers = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
@@ -21,15 +23,28 @@ web-sys = { version = "0.3", features = [
     "CanvasRenderingContext2d",
     "Document",
     "Element",
+    "HtmlAnchorElement",
     "HtmlCanvasElement",
+    "HtmlInputElement",
     "Window",
     "MouseEvent",
     "WheelEvent",
     "KeyboardEvent",
     "DomRect",
     "CssStyleDeclaration",
+    "UrlSearchParams",
+    "Location",
+    "File",
+    "FileList",
+    "WebSocket",
+    "MessageEvent",
+    "BinaryType",
+    "Blob",
+    "BlobPropertyBag",
+    "Url",
 ] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true, features = ["js"] }
 getrandom = { version = "0.3", features = ["wasm_js"] }
+gloo-file = { version = "0.3", features = ["futures"] }

@@ -10,19 +10,23 @@
       html, body, #app { width: 100%; height: 100%; overflow: hidden; font-family: system-ui, sans-serif; }
       .app { display: flex; flex-direction: column; height: 100%; }
       .toolbar {
-        display: flex; align-items: center; gap: 8px;
+        display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
         padding: 8px 12px; background: #1e1e1e; color: #fff;
         border-bottom: 1px solid #333;
       }
-      .brand { font-weight: 700; margin-right: 12px; letter-spacing: -0.02em; }
+      .brand { font-weight: 700; margin-right: 8px; }
+      .tool-group { display: flex; gap: 4px; padding-right: 8px; border-right: 1px solid #444; }
       .tool-btn {
         background: #2d2d2d; color: #fff; border: 1px solid #444;
-        border-radius: 6px; padding: 6px 12px; cursor: pointer;
+        border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px;
       }
       .tool-btn:hover { background: #3d3d3d; }
       .tool-btn.active { background: #6965db; border-color: #6965db; }
-      .hint { margin-left: auto; opacity: 0.6; font-size: 12px; }
+      .tool-btn.primary { background: #2f9e44; border-color: #2f9e44; }
+      .status { font-size: 12px; opacity: 0.8; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+      .hint { margin-left: auto; opacity: 0.5; font-size: 11px; }
       .canvas { flex: 1; width: 100%; cursor: crosshair; display: block; }
+      .hidden-input { display: none; }
     </style>
   </head>
   <body>
