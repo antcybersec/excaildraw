@@ -49,9 +49,13 @@ pub async fn handle_socket(socket: WebSocket, room_id: String, state: AppState) 
                         ClientMessage::Update { elements } => {
                             state.apply_update(&room_id, elements).await;
                         }
+                        ClientMessage::Encrypted { payload } => {
+                            state.relay_encrypted(&room_id, payload).await;
+                        }
                         ClientMessage::Cursor { user, x, y, color } => {
                             if let Some(tx) = state.room_sender(&room_id).await {
-                                let _ = tx.send(ServerMessage::Cursor { user, x, y, color });
+                                let msg = ServerMessage::Cursor { user, x, y, color };
+                                let _ = tx.send(msg);
                             }
                         }
                         ClientMessage::Join { .. } => {}

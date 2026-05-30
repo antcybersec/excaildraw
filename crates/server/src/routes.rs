@@ -1,9 +1,11 @@
+use crate::auth::{bearer_user, issue_token, TokenRequest, TokenResponse};
+use crate::broker::Broker;
 use crate::db::Database;
 use crate::state::AppState;
 use crate::ws;
 use axum::{
     extract::{Path, State, WebSocketUpgrade},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -38,6 +40,7 @@ struct SaveRoomRequest {
 pub fn api_routes() -> Router<AppState> {
     Router::new()
         .route("/health", get(health))
+        .route("/api/auth/token", post(auth_token))
         .route("/api/rooms", post(create_room))
         .route("/api/rooms/{id}", get(get_room).put(save_room))
         .route("/ws/{id}", get(ws_upgrade))
@@ -50,13 +53,29 @@ async fn health() -> Json<HealthResponse> {
     })
 }
 
-async fn create_room(State(state): State<AppState>) -> Json<CreateRoomResponse> {
+async fn auth_token(Json(body): Json<TokenRequest>) -> Result<Json<TokenResponse>, StatusCode> {
+    if body.username.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    issue_token(&body.username)
+        .map(Json)
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn create_room(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<CreateRoomResponse>, StatusCode> {
+    if std::env::var("REQUIRE_AUTH").ok().as_deref() == Some("1") {
+        bearer_user(headers.get("authorization").and_then(|v| v.to_str().ok()))
+            .ok_or(StatusCode::UNAUTHORIZED)?;
+    }
     let id = state.create_room().await;
-    Json(CreateRoomResponse {
+    Ok(Json(CreateRoomResponse {
         url: format!("/?room={id}"),
         ws_url: format!("/ws/{id}"),
         id,
-    })
+    }))
 }
 
 async fn get_room(
@@ -94,7 +113,7 @@ async fn ws_upgrade(
         .into_response()
 }
 
-pub async fn build_state() -> AppState {
+pub async fn build_state(broker: Broker) -> AppState {
     let db = Database::connect().await;
-    AppState::new(db)
+    AppState::new(db, broker)
 }

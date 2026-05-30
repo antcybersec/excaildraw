@@ -15,6 +15,16 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   server:
     build:
       context: ..
@@ -23,9 +33,12 @@ services:
       - "8080:8080"
     environment:
       DATABASE_URL: postgres://excaildraw:excaildraw@postgres:5432/excaildraw
+      REDIS_URL: redis://redis:6379
       RUST_LOG: excaildraw_server=info
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
 volumes:

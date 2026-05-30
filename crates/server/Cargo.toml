@@ -23,3 +23,5 @@ tracing-subscriber = { workspace = true }
 thiserror = { workspace = true }
 futures = "0.3"
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "json"] }
+jsonwebtoken = "9"
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
