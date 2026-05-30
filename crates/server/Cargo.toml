@@ -1,0 +1,23 @@
+[package]
+name = "excaildraw-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Axum backend for excaildraw rooms and collaboration"
+
+[[bin]]
+name = "excaildraw-server"
+path = "src/main.rs"
+
+[dependencies]
+excaildraw-core = { path = "../core" }
+axum = { version = "0.8", features = ["ws", "json"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
