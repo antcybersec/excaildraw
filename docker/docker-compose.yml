@@ -9,6 +9,24 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U excaildraw"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://excaildraw:excaildraw@postgres:5432/excaildraw
+      RUST_LOG: excaildraw_server=info
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:
