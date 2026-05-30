@@ -7,6 +7,8 @@ pub enum ClientMessage {
     Join { user: String, color: String },
     Update { elements: Vec<Element> },
     Cursor { user: String, x: f64, y: f64, color: String },
+    /// Opaque E2E-encrypted payload (server relays without decrypting).
+    Encrypted { payload: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +18,7 @@ pub enum ServerMessage {
     Sync { elements: Vec<Element> },
     Cursor { user: String, x: f64, y: f64, color: String },
     Error { message: String },
+    Encrypted { payload: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

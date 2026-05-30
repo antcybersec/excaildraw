@@ -116,6 +116,8 @@ pub struct Element {
     pub text_align: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vertical_align: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_id: Option<String>,
 }
 
 fn default_stroke_color() -> String {
@@ -190,6 +192,7 @@ impl Element {
             font_family: None,
             text_align: None,
             vertical_align: None,
+            file_id: None,
         }
     }
 
