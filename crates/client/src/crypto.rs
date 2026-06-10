@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 
 fn derive_key(password: &str, room_id: &str) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update(format!("excaildraw:{room_id}:{password}"));
+    hasher.update(format!("rustcanvas:{room_id}:{password}"));
     hasher.finalize().into()
 }
 

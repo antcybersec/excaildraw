@@ -55,7 +55,7 @@ async fn main() {
         .and_then(|p| p.parse().ok())
         .unwrap_or(8080);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    tracing::info!("excaildraw server listening on http://{addr}");
+    tracing::info!("rustCanvas server listening on http://{addr}");
     let listener = tokio::net::TcpListener::bind(addr).await.expect("bind failed");
     axum::serve(listener, app).await.expect("server failed");
 }

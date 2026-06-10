@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>excaildraw</title>
+    <title>rustCanvas</title>
     <link data-trunk rel="rust" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -29,13 +29,14 @@
         --tool-size: 36px;
       }
 
-      .app.dark {
+      html.dark {
         --color-surface: #1e1e1e;
         --color-surface-low: #121212;
         --color-border: rgba(255, 255, 255, 0.1);
         --color-text: #ececec;
         --color-text-muted: #9b9b9b;
-        --color-primary-light: rgba(105, 101, 219, 0.2);
+        --color-primary-light: rgba(105, 101, 219, 0.25);
+        --color-primary-darker: #8b87e8;
         --canvas-bg: #121212;
       }
 
@@ -67,7 +68,9 @@
         transition: background 0.15s, border-color 0.15s;
       }
       .chip:hover { background: var(--color-surface-low); border-color: rgba(0,0,0,0.12); }
-      .app.dark .chip:hover { border-color: rgba(255,255,255,0.18); }
+      html.dark .chip:hover { border-color: rgba(255,255,255,0.18); }
+      html.dark .tool-btn:hover { color: #8b87e8; }
+      html.dark .room-pass::placeholder { color: var(--color-text-muted); }
       .chip.primary { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
       .chip.primary:hover { background: var(--color-primary-darker); }
       .room-pass {

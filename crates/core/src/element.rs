@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub const SCHEMA_VERSION: u32 = 2;
-pub const SOURCE_URL: &str = "https://excaildraw.app";
+pub const SOURCE_URL: &str = "https://rustcanvas.app";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

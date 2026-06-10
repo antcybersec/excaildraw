@@ -218,6 +218,14 @@ pub fn app() -> Html {
     };
 
     {
+        let theme = theme.clone();
+        use_effect_with((), move |_| {
+            crate::theme::apply_document_class(theme.borrow().dark);
+            || ()
+        });
+    }
+
+    {
         let canvas_ref = canvas_ref.clone();
         let viewport = viewport.clone();
         let editor = editor.clone();
@@ -780,7 +788,7 @@ pub fn app() -> Html {
                         }
                     }
                     "toggle-theme" => {
-                        theme.borrow_mut().dark = !theme.borrow().dark;
+                        theme.borrow_mut().toggle();
                         bump_frame();
                     }
                     "collab" => {
@@ -1029,9 +1037,9 @@ pub fn app() -> Html {
     let dark_canvas = theme_snapshot.dark;
 
     html! {
-        <div class={classes!("app", dark_canvas.then_some("dark"))} ref={app_ref}>
+        <div class="app" ref={app_ref}>
             <header class="top-bar">
-                <div class="brand">{"ex"}<span>{"caildraw"}</span></div>
+                <div class="brand">{"rust"}<span>{"Canvas"}</span></div>
                 <div class="chip-group">
                     <button type="button" class="chip" data-action="undo">{"Undo"}</button>
                     <button type="button" class="chip" data-action="redo">{"Redo"}</button>

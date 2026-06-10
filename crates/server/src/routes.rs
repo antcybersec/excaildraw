@@ -72,7 +72,7 @@ async fn dev_landing() -> Html<&'static str> {
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>excaildraw</title>
+  <title>rustCanvas</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 640px; margin: 48px auto; padding: 0 16px; line-height: 1.5; }
     code, pre { background: #f1f3f5; border-radius: 6px; }
@@ -82,7 +82,7 @@ async fn dev_landing() -> Html<&'static str> {
   </style>
 </head>
 <body>
-  <h1>excaildraw API is running</h1>
+  <h1>rustCanvas API is running</h1>
   <p>Port <strong>8080</strong> serves the backend only. The drawing UI is a separate WASM app.</p>
   <h2>Start the UI (dev)</h2>
   <p>In a <strong>second terminal</strong>:</p>
@@ -100,7 +100,7 @@ async fn dev_landing() -> Html<&'static str> {
 async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok",
-        service: "excaildraw-server",
+        service: "rustcanvas-server",
     })
 }
 

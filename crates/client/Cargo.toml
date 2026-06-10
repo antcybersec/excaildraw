@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "WebAssembly client for excaildraw"
+description = "WebAssembly client for rustCanvas"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -24,7 +24,9 @@ web-sys = { version = "0.3", features = [
     "CanvasRenderingContext2d",
     "Document",
     "Element",
+    "HtmlElement",
     "HtmlAnchorElement",
+    "Storage",
     "HtmlCanvasElement",
     "HtmlImageElement",
     "HtmlInputElement",

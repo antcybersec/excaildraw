@@ -1,7 +1,7 @@
 use indexed_db_futures::prelude::*;
 use wasm_bindgen::JsValue;
 
-const DB_NAME: &str = "excaildraw";
+const DB_NAME: &str = "rustcanvas";
 const STORE: &str = "kv";
 
 async fn open_db() -> Result<IdbDatabase, JsValue> {

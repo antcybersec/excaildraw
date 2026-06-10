@@ -1,0 +1,12 @@
+target
+dist
+.git
+.github
+*.md
+chat_history.md
+.env
+.env.*
+.DS_Store
+.idea
+.vscode
+**/.trunk

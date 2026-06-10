@@ -28,12 +28,13 @@ services:
   server:
     build:
       context: ..
-      dockerfile: docker/Dockerfile
+      dockerfile: docker/Dockerfile.prod
     ports:
       - "8080:8080"
     environment:
       DATABASE_URL: postgres://excaildraw:excaildraw@postgres:5432/excaildraw
       REDIS_URL: redis://redis:6379
+      FRONTEND_DIST: /app/dist
       RUST_LOG: excaildraw_server=info
     depends_on:
       postgres:
