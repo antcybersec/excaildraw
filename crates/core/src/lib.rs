@@ -1,3 +1,4 @@
+pub mod bounds;
 pub mod element;
 pub mod export;
 pub mod file;
@@ -7,6 +8,7 @@ pub mod protocol;
 pub mod reconcile;
 pub mod rough;
 
+pub use bounds::normalize_element_bounds;
 pub use element::*;
 pub use export::to_svg;
 pub use file::*;

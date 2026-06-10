@@ -6,10 +6,11 @@ use crate::ws;
 use axum::{
     extract::{Path, State, WebSocketUpgrade},
     http::{HeaderMap, StatusCode},
-    response::IntoResponse,
+    response::{Html, IntoResponse},
     routing::{get, post},
     Json, Router,
 };
+use tower_http::services::{ServeDir, ServeFile};
 use excaildraw_core::ExcalidrawFile;
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +45,56 @@ pub fn api_routes() -> Router<AppState> {
         .route("/api/rooms", post(create_room))
         .route("/api/rooms/{id}", get(get_room).put(save_room))
         .route("/ws/{id}", get(ws_upgrade))
+}
+
+fn frontend_dist() -> std::path::PathBuf {
+    std::env::var("FRONTEND_DIST")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("dist"))
+}
+
+pub fn app_routes(state: AppState) -> Router {
+    let api = api_routes().with_state(state);
+    let dist = frontend_dist();
+    let index = dist.join("index.html");
+
+    if index.exists() {
+        let serve_dir = ServeDir::new(&dist).not_found_service(ServeFile::new(index));
+        api.fallback_service(serve_dir)
+    } else {
+        api.route("/", get(dev_landing))
+    }
+}
+
+async fn dev_landing() -> Html<&'static str> {
+    Html(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>excaildraw</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 48px auto; padding: 0 16px; line-height: 1.5; }
+    code, pre { background: #f1f3f5; border-radius: 6px; }
+    code { padding: 2px 6px; }
+    pre { padding: 12px; overflow-x: auto; }
+    a { color: #6965db; }
+  </style>
+</head>
+<body>
+  <h1>excaildraw API is running</h1>
+  <p>Port <strong>8080</strong> serves the backend only. The drawing UI is a separate WASM app.</p>
+  <h2>Start the UI (dev)</h2>
+  <p>In a <strong>second terminal</strong>:</p>
+  <pre>cd crates/client && trunk serve --open</pre>
+  <p>Then open <a href="http://127.0.0.1:3000">http://127.0.0.1:3000</a></p>
+  <h2>Or serve UI from this port</h2>
+  <p>Build once, then refresh this page:</p>
+  <pre>cd crates/client && trunk build --release</pre>
+  <p>That writes static files to <code>dist/</code>, which this server will serve automatically.</p>
+</body>
+</html>"#,
+    )
 }
 
 async fn health() -> Json<HealthResponse> {

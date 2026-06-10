@@ -42,14 +42,13 @@ async fn main() {
 
     let limiter = RateLimiter::new(120, 60);
     let limiter_clone = limiter.clone();
-    let app = routes::api_routes()
+    let app = routes::app_routes(state)
         .layer(from_fn(move |req, next| {
             let limiter = limiter_clone.clone();
             async move { rate_limit(limiter, req, next).await }
         }))
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
-        .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        .layer(TraceLayer::new_for_http());
 
     let port: u16 = std::env::var("PORT")
         .ok()

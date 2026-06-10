@@ -3,7 +3,10 @@ mod canvas;
 mod collab;
 mod crypto;
 mod editor;
+mod icons;
+mod render_loop;
 mod storage;
+mod theme;
 mod viewport;
 
 use app::App;

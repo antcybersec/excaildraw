@@ -7,7 +7,18 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{MessageEvent, WebSocket};
 
-const API_BASE: &str = "http://127.0.0.1:8080";
+fn api_base() -> String {
+    web_sys::window()
+        .and_then(|w| w.location().origin().ok())
+        .filter(|origin| !origin.ends_with(":3000"))
+        .unwrap_or_else(|| "http://127.0.0.1:8080".to_string())
+}
+
+fn ws_base() -> String {
+    api_base()
+        .replace("https://", "wss://")
+        .replace("http://", "ws://")
+}
 
 thread_local! {
     static AUTH_TOKEN: RefCell<Option<String>> = const { RefCell::new(None) };
@@ -34,7 +45,7 @@ impl CollabHandle {
         on_sync: Rc<dyn Fn(Vec<Element>)>,
         on_cursor: Rc<dyn Fn(String, f64, f64, String)>,
     ) -> Result<Self, JsValue> {
-        let url = format!("ws://127.0.0.1:8080/ws/{room_id}");
+        let url = format!("{}/ws/{room_id}", ws_base());
         let ws = WebSocket::new(&url)?;
         ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
 
@@ -165,7 +176,7 @@ async fn flush_offline_queue() {
 
 pub async fn create_room() -> Option<String> {
     let token = AUTH_TOKEN.with(|t| t.borrow().clone());
-    let mut builder = gloo_net::http::Request::post(&format!("{API_BASE}/api/rooms"));
+    let mut builder = gloo_net::http::Request::post(&format!("{}/api/rooms", api_base()));
     if let Some(token) = token {
         builder = builder.header("Authorization", &format!("Bearer {token}"));
     }
@@ -175,7 +186,7 @@ pub async fn create_room() -> Option<String> {
 }
 
 pub async fn fetch_auth_token(username: &str) -> Option<String> {
-    let resp = gloo_net::http::Request::post(&format!("{API_BASE}/api/auth/token"))
+    let resp = gloo_net::http::Request::post(&format!("{}/api/auth/token", api_base()))
         .header("Content-Type", "application/json")
         .body(serde_json::json!({ "username": username }).to_string())
         .ok()?

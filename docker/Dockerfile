@@ -2,6 +2,7 @@ FROM rust:1.89-bookworm AS builder
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+COPY apps ./apps
 RUN cargo build --release -p excaildraw-server
 
 FROM debian:bookworm-slim

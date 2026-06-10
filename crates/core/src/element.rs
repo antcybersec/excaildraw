@@ -133,7 +133,7 @@ fn default_stroke_width() -> f64 {
 }
 
 fn default_roughness() -> f64 {
-    1.0
+    0.6
 }
 
 fn default_opacity() -> f64 {
@@ -212,9 +212,16 @@ pub fn random_nonce() -> u64 {
 }
 
 pub fn current_timestamp() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+    #[cfg(target_arch = "wasm32")]
+    {
+        js_sys::Date::now() as u64
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    }
 }

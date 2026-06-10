@@ -5,44 +5,175 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>excaildraw</title>
     <link data-trunk rel="rust" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
     <style>
+      @font-face {
+        font-family: Virgil;
+        src: url("https://excalidraw.com/Virgil.woff2") format("woff2");
+        font-display: swap;
+      }
+
+      :root {
+        --color-primary: #6965db;
+        --color-primary-darker: #5b57c9;
+        --color-primary-light: #ebebff;
+        --color-surface: #ffffff;
+        --color-surface-low: #f8f9fa;
+        --color-border: rgba(0, 0, 0, 0.08);
+        --color-text: #1b1b1f;
+        --color-text-muted: #868e96;
+        --canvas-bg: #ffffff;
+        --island-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.08);
+        --tool-size: 36px;
+      }
+
+      .app.dark {
+        --color-surface: #1e1e1e;
+        --color-surface-low: #121212;
+        --color-border: rgba(255, 255, 255, 0.1);
+        --color-text: #ececec;
+        --color-text-muted: #9b9b9b;
+        --color-primary-light: rgba(105, 101, 219, 0.2);
+        --canvas-bg: #121212;
+      }
+
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      html, body, #app { width: 100%; height: 100%; overflow: hidden; font-family: system-ui, sans-serif; }
+      html, body, #app { width: 100%; height: 100%; overflow: hidden; }
+      body {
+        font-family: Inter, system-ui, -apple-system, sans-serif;
+        color: var(--color-text);
+        background: var(--color-surface-low);
+      }
       .app { display: flex; flex-direction: column; height: 100%; }
-      .toolbar {
-        display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-        padding: 8px 12px; background: #1e1e1e; color: #fff;
-        border-bottom: 1px solid #333;
+
+      .top-bar {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        padding: 8px 12px; background: var(--color-surface);
+        border-bottom: 1px solid var(--color-border);
+        z-index: 50; position: relative;
       }
-      .brand { font-weight: 700; margin-right: 8px; }
-      .tool-group { display: flex; gap: 4px; padding-right: 8px; border-right: 1px solid #444; }
-      .tool-btn {
-        background: #2d2d2d; color: #fff; border: 1px solid #444;
-        border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px;
+      .brand {
+        font-weight: 600; font-size: 15px; color: var(--color-text);
+        margin-right: 4px; letter-spacing: -0.02em;
       }
-      .tool-btn:hover { background: #3d3d3d; }
-      .tool-btn.active { background: #6965db; border-color: #6965db; }
-      .tool-btn.primary { background: #2f9e44; border-color: #2f9e44; }
+      .brand span { color: var(--color-primary); }
+      .chip-group { display: flex; gap: 4px; align-items: center; }
+      .chip {
+        background: var(--color-surface); color: var(--color-text);
+        border: 1px solid var(--color-border); border-radius: 8px;
+        padding: 6px 10px; cursor: pointer; font-size: 12px; font-weight: 500;
+        transition: background 0.15s, border-color 0.15s;
+      }
+      .chip:hover { background: var(--color-surface-low); border-color: rgba(0,0,0,0.12); }
+      .app.dark .chip:hover { border-color: rgba(255,255,255,0.18); }
+      .chip.primary { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+      .chip.primary:hover { background: var(--color-primary-darker); }
       .room-pass {
-        background: #2d2d2d; color: #fff; border: 1px solid #444; border-radius: 6px;
-        padding: 6px 8px; width: 120px;
+        background: var(--color-surface-low); color: var(--color-text);
+        border: 1px solid var(--color-border); border-radius: 8px;
+        padding: 6px 10px; width: 130px; font-size: 12px;
       }
-      .status { font-size: 12px; opacity: 0.8; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
-      .hint { margin-left: auto; opacity: 0.5; font-size: 11px; }
-      .main { flex: 1; display: flex; min-height: 0; }
+      .status { font-size: 11px; color: var(--color-text-muted); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+      .spacer { flex: 1; }
+      .hint { font-size: 11px; color: var(--color-text-muted); }
+
+      .workspace { flex: 1; display: flex; min-height: 0; }
+
+      .tool-rail {
+        width: 52px; padding: 10px 8px;
+        display: flex; flex-direction: column; gap: 4px;
+        background: var(--color-surface);
+        border-right: 1px solid var(--color-border);
+        z-index: 50; position: relative; flex-shrink: 0;
+      }
+      .tool-btn {
+        width: var(--tool-size); height: var(--tool-size);
+        display: flex; align-items: center; justify-content: center;
+        border: none; border-radius: 8px; cursor: pointer;
+        background: transparent; color: var(--color-text);
+        position: relative; transition: background 0.12s, color 0.12s;
+        pointer-events: auto; flex-shrink: 0;
+      }
+      .tool-btn:hover { background: var(--color-primary-light); color: var(--color-primary-darker); }
+      .tool-btn.active {
+        background: var(--color-primary-light);
+        color: var(--color-primary);
+        box-shadow: inset 0 0 0 1px rgba(105, 101, 219, 0.35);
+      }
+      .tool-btn .tool-icon { width: 20px; height: 20px; pointer-events: none; }
+      .tool-btn .key-hint {
+        position: absolute; bottom: 2px; right: 3px;
+        font-size: 8px; font-weight: 600; opacity: 0.45; line-height: 1;
+        pointer-events: none;
+      }
+      .tool-btn.active .key-hint { opacity: 0.7; color: var(--color-primary); }
+
+      .canvas-area { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+      .canvas-wrap {
+        flex: 1; position: relative; min-height: 0; overflow: hidden;
+        background: var(--canvas-bg);
+      }
+      .canvas {
+        width: 100%; height: 100%; display: block;
+        touch-action: none; outline: none;
+      }
+      .canvas.tool-select { cursor: default; }
+      .canvas.tool-draw { cursor: crosshair; }
+      .canvas.tool-text { cursor: text; }
+      .canvas.tool-eraser { cursor: cell; }
+      .canvas.panning { cursor: grab; }
+
+      /* Excalidraw-style inline text: no box, text appears exactly on canvas */
+      .text-editor {
+        position: absolute;
+        min-width: 1ch;
+        width: auto;
+        max-width: none;
+        padding: 0;
+        margin: 0;
+        border: none;
+        outline: none;
+        background: transparent;
+        box-shadow: none;
+        resize: none;
+        overflow: hidden;
+        font-family: Virgil, Segoe UI, sans-serif;
+        line-height: 1;
+        white-space: nowrap;
+        word-break: normal;
+        overflow-wrap: normal;
+        pointer-events: auto;
+        z-index: 10;
+      }
+
       .layers {
-        width: 220px; background: #fff; border-right: 1px solid #dee2e6;
-        overflow-y: auto; padding: 8px;
+        width: 200px; background: var(--color-surface);
+        border-left: 1px solid var(--color-border);
+        overflow-y: auto; padding: 12px 10px;
+        z-index: 50; position: relative; flex-shrink: 0;
       }
-      .layers-head { font-weight: 600; margin-bottom: 8px; color: #495057; }
+      .layers-head {
+        font-weight: 600; font-size: 12px; margin-bottom: 10px;
+        color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.04em;
+      }
       .layer-row {
         display: flex; gap: 4px; align-items: center; margin-bottom: 4px;
-        padding: 4px; border-radius: 4px;
+        padding: 6px 8px; border-radius: 8px; border: 1px solid transparent;
       }
-      .layer-row.active { background: #e7f5ff; }
-      .layer-name { flex: 1; text-align: left; border: none; background: transparent; cursor: pointer; font-size: 12px; }
-      .layer-btn { width: 24px; border: 1px solid #ced4da; background: #f8f9fa; border-radius: 4px; cursor: pointer; }
-      .canvas { flex: 1; width: 100%; cursor: crosshair; display: block; }
+      .layer-row:hover { background: var(--color-surface-low); }
+      .layer-row.active { background: var(--color-primary-light); border-color: rgba(105,101,219,0.25); }
+      .layer-name {
+        flex: 1; text-align: left; border: none; background: transparent;
+        cursor: pointer; font-size: 12px; color: var(--color-text);
+      }
+      .layer-btn {
+        width: 22px; height: 22px; border: 1px solid var(--color-border);
+        background: var(--color-surface); border-radius: 6px; cursor: pointer;
+        font-size: 11px; color: var(--color-text-muted);
+      }
+      .layer-btn:hover { background: var(--color-surface-low); }
       .hidden-input { display: none; }
     </style>
   </head>

@@ -21,9 +21,49 @@ impl SeededRng {
     }
 
     fn offset(&mut self, roughness: f64, stroke_width: f64) -> f64 {
-        let r = roughness.max(0.1);
-        (self.next_f64() - 0.5) * r * stroke_width * 2.5
+        let r = roughness.max(0.0);
+        (self.next_f64() - 0.5) * r * stroke_width * 0.85
     }
+}
+
+fn rough_line_segment(
+    seed: u64,
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    roughness: f64,
+    stroke_width: f64,
+) -> Vec<(f64, f64)> {
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 0.001 {
+        return vec![(x1, y1)];
+    }
+
+    if roughness < 0.01 {
+        return vec![(x1, y1), (x2, y2)];
+    }
+
+    let mut rng = SeededRng::new(seed);
+    let segments = ((len / 10.0).ceil() as usize).clamp(2, 16);
+    let nx = -dy / len;
+    let ny = dx / len;
+
+    let mut points = Vec::with_capacity(segments + 1);
+    for i in 0..=segments {
+        let t = i as f64 / segments as f64;
+        let px = x1 + dx * t;
+        let py = y1 + dy * t;
+        let edge_off = if i == 0 || i == segments {
+            rng.offset(roughness * 0.35, stroke_width)
+        } else {
+            rng.offset(roughness, stroke_width)
+        };
+        points.push((px + nx * edge_off, py + ny * edge_off));
+    }
+    points
 }
 
 pub fn rough_rectangle(
@@ -35,23 +75,36 @@ pub fn rough_rectangle(
     roughness: f64,
     stroke_width: f64,
 ) -> Vec<(f64, f64)> {
-    let mut rng = SeededRng::new(seed);
     let w = width.max(1.0);
     let h = height.max(1.0);
-    let corners = [
-        (x, y),
-        (x + w, y),
-        (x + w, y + h),
-        (x, y + h),
-    ];
-    let mut points = Vec::with_capacity(5);
-    for (cx, cy) in corners {
-        points.push((
-            cx + rng.offset(roughness, stroke_width),
-            cy + rng.offset(roughness, stroke_width),
-        ));
+
+    if roughness < 0.01 {
+        return vec![(x, y), (x + w, y), (x + w, y + h), (x, y + h), (x, y)];
     }
-    points.push(points[0]);
+
+    let corners = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)];
+    let mut points = Vec::new();
+    for i in 0..4 {
+        let (x1, y1) = corners[i];
+        let (x2, y2) = corners[(i + 1) % 4];
+        let edge = rough_line_segment(
+            seed.wrapping_add(i as u64 * 17),
+            x1,
+            y1,
+            x2,
+            y2,
+            roughness,
+            stroke_width,
+        );
+        if i == 0 {
+            points.extend(edge);
+        } else {
+            points.extend(edge.into_iter().skip(1));
+        }
+    }
+    if let Some(first) = points.first().copied() {
+        points.push(first);
+    }
     points
 }
 
@@ -64,14 +117,29 @@ pub fn rough_ellipse(
     roughness: f64,
     stroke_width: f64,
 ) -> Vec<(f64, f64)> {
+    let rx = rx.max(0.5);
+    let ry = ry.max(0.5);
+    let steps = 64;
+
+    if roughness < 0.01 {
+        let mut points = Vec::with_capacity(steps + 1);
+        for i in 0..=steps {
+            let t = (i as f64 / steps as f64) * std::f64::consts::TAU;
+            points.push((cx + rx * t.cos(), cy + ry * t.sin()));
+        }
+        return points;
+    }
+
     let mut rng = SeededRng::new(seed.wrapping_add(17));
-    let steps = 32;
     let mut points = Vec::with_capacity(steps + 1);
     for i in 0..=steps {
         let t = (i as f64 / steps as f64) * std::f64::consts::TAU;
-        let px = cx + rx * t.cos() + rng.offset(roughness, stroke_width);
-        let py = cy + ry * t.sin() + rng.offset(roughness, stroke_width);
-        points.push((px, py));
+        let px = cx + rx * t.cos();
+        let py = cy + ry * t.sin();
+        let nx = t.cos();
+        let ny = t.sin();
+        let off = rng.offset(roughness * 0.65, stroke_width);
+        points.push((px + nx * off, py + ny * off));
     }
     points
 }
@@ -86,18 +154,39 @@ pub fn rough_polyline(
     if coords.len() < 4 {
         return Vec::new();
     }
-    let mut rng = SeededRng::new(seed.wrapping_add(31));
+
     let mut points = Vec::new();
-    for chunk in coords.chunks(2) {
-        if chunk.len() == 2 {
-            points.push((
-                chunk[0] + rng.offset(roughness, stroke_width),
-                chunk[1] + rng.offset(roughness, stroke_width),
-            ));
-        }
+    let pairs: Vec<(f64, f64)> = coords
+        .chunks(2)
+        .filter_map(|c| (c.len() == 2).then_some((c[0], c[1])))
+        .collect();
+
+    if pairs.len() < 2 {
+        return points;
     }
-    if closed && !points.is_empty() {
-        points.push(points[0]);
+
+    let segment_count = if closed { pairs.len() } else { pairs.len() - 1 };
+    for i in 0..segment_count {
+        let (x1, y1) = pairs[i];
+        let (x2, y2) = if i + 1 < pairs.len() {
+            pairs[i + 1]
+        } else {
+            pairs[0]
+        };
+        let edge = rough_line_segment(
+            seed.wrapping_add(i as u64 * 23),
+            x1,
+            y1,
+            x2,
+            y2,
+            roughness,
+            stroke_width,
+        );
+        if points.is_empty() {
+            points.extend(edge);
+        } else {
+            points.extend(edge.into_iter().skip(1));
+        }
     }
     points
 }
@@ -112,5 +201,14 @@ mod tests {
         let b = rough_rectangle(42, 0.0, 0.0, 100.0, 50.0, 1.0, 2.0);
         assert_eq!(a, b);
         assert!(a.len() >= 4);
+    }
+
+    #[test]
+    fn rectangle_stays_axis_aligned_at_zero_roughness() {
+        let path = rough_rectangle(1, 10.0, 20.0, 80.0, 40.0, 0.0, 2.0);
+        assert_eq!(path[0], (10.0, 20.0));
+        assert_eq!(path[1], (90.0, 20.0));
+        assert_eq!(path[2], (90.0, 60.0));
+        assert_eq!(path[3], (10.0, 60.0));
     }
 }

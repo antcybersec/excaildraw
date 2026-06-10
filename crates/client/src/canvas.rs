@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use web_sys::CanvasRenderingContext2d;
 
 use crate::editor::Collaborators;
+use crate::theme::CanvasTheme;
 use crate::viewport::Viewport;
 
 #[allow(clippy::too_many_arguments)]
@@ -14,31 +15,35 @@ pub fn render_scene(
     viewport: &Viewport,
     width: f64,
     height: f64,
+    theme: &CanvasTheme,
     elements: &[Element],
     files: &HashMap<String, Value>,
     preview: Option<&Element>,
     selected: &[String],
     collaborators: &Collaborators,
 ) {
-    ctx.set_fill_style_str("#f8f9fa");
+    ctx.set_fill_style_str(theme.canvas_background());
     ctx.fill_rect(0.0, 0.0, width, height);
 
     ctx.save();
     ctx.translate(viewport.offset_x, viewport.offset_y).ok();
     ctx.scale(viewport.zoom, viewport.zoom).ok();
 
-    draw_grid(ctx, viewport, width, height);
+    ctx.set_line_cap("round");
+    ctx.set_line_join("round");
 
     for element in elements.iter().filter(|e| !e.is_deleted) {
-        draw_element(ctx, element, files);
+        draw_element(ctx, element, files, false);
         if selected.contains(&element.id) {
-            draw_selection(ctx, element);
+            draw_selection(ctx, element, theme);
         }
     }
 
     if let Some(preview) = preview {
-        ctx.set_global_alpha(0.6);
-        draw_element(ctx, preview, files);
+        let mut crisp = preview.clone();
+        crisp.roughness = 0.0;
+        ctx.set_global_alpha(0.75);
+        draw_element(ctx, &crisp, files, true);
         ctx.set_global_alpha(1.0);
     }
 
@@ -64,9 +69,9 @@ fn draw_path(ctx: &CanvasRenderingContext2d, points: &[(f64, f64)], close: bool)
     ctx.stroke();
 }
 
-fn draw_selection(ctx: &CanvasRenderingContext2d, element: &Element) {
+fn draw_selection(ctx: &CanvasRenderingContext2d, element: &Element, theme: &CanvasTheme) {
     let (x, y, w, h) = element_bounds(element);
-    ctx.set_stroke_style_str("#6965db");
+    ctx.set_stroke_style_str(theme.selection_color());
     ctx.set_line_width(1.0);
     ctx.set_global_alpha(1.0);
     ctx.stroke_rect(x - 4.0, y - 4.0, w + 8.0, h + 8.0);
@@ -81,33 +86,12 @@ fn draw_cursor(ctx: &CanvasRenderingContext2d, user: &str, x: f64, y: f64, color
     ctx.fill_text(user, x + 8.0, y - 8.0).ok();
 }
 
-fn draw_grid(ctx: &CanvasRenderingContext2d, viewport: &Viewport, width: f64, height: f64) {
-    let step = 20.0;
-    let (min_x, min_y) = viewport.screen_to_world(0.0, 0.0);
-    let (max_x, max_y) = viewport.screen_to_world(width, height);
-    let start_x = (min_x / step).floor() * step;
-    let start_y = (min_y / step).floor() * step;
-    ctx.set_stroke_style_str("#e9ecef");
-    ctx.set_line_width(1.0 / viewport.zoom);
-    let mut x = start_x;
-    while x <= max_x {
-        ctx.begin_path();
-        ctx.move_to(x, min_y);
-        ctx.line_to(x, max_y);
-        ctx.stroke();
-        x += step;
-    }
-    let mut y = start_y;
-    while y <= max_y {
-        ctx.begin_path();
-        ctx.move_to(min_x, y);
-        ctx.line_to(max_x, y);
-        ctx.stroke();
-        y += step;
-    }
-}
-
-fn draw_element(ctx: &CanvasRenderingContext2d, element: &Element, files: &HashMap<String, Value>) {
+fn draw_element(
+    ctx: &CanvasRenderingContext2d,
+    element: &Element,
+    files: &HashMap<String, Value>,
+    _is_preview: bool,
+) {
     ctx.set_stroke_style_str(&element.stroke_color);
     ctx.set_fill_style_str(&element.background_color);
     ctx.set_line_width(element.stroke_width);
@@ -147,13 +131,14 @@ fn draw_element(ctx: &CanvasRenderingContext2d, element: &Element, files: &HashM
             }
             draw_path(ctx, &path, true);
         }
-        ElementType::Line => draw_line(ctx, element, false),
-        ElementType::Arrow => draw_line(ctx, element, true),
-        ElementType::Freedraw => draw_freedraw(ctx, element),
+        ElementType::Line => draw_line(ctx, element, false, &element.stroke_color),
+        ElementType::Arrow => draw_line(ctx, element, true, &element.stroke_color),
+        ElementType::Freedraw => draw_freedraw_smooth(ctx, element),
         ElementType::Text => {
             if let Some(text) = &element.text {
                 let size = element.font_size.unwrap_or(20.0);
-                ctx.set_font(&format!("{size}px sans-serif"));
+                ctx.set_fill_style_str(&element.stroke_color);
+                ctx.set_font(&format!("{size}px Virgil, Segoe UI, sans-serif"));
                 ctx.fill_text(text, element.x, element.y + size).ok();
             }
         }
@@ -185,7 +170,12 @@ fn fill_path(ctx: &CanvasRenderingContext2d, points: &[(f64, f64)]) {
     ctx.fill();
 }
 
-fn draw_line(ctx: &CanvasRenderingContext2d, element: &Element, arrow: bool) {
+fn draw_line(
+    ctx: &CanvasRenderingContext2d,
+    element: &Element,
+    arrow: bool,
+    stroke_color: &str,
+) {
     if let Some(points) = &element.points {
         let path = rough_polyline(
             element.seed,
@@ -196,12 +186,20 @@ fn draw_line(ctx: &CanvasRenderingContext2d, element: &Element, arrow: bool) {
         );
         draw_path(ctx, &path, false);
         if arrow && points.len() >= 4 {
-            draw_arrowhead(ctx, points[0], points[1], points[2], points[3]);
+            draw_arrowhead(ctx, points[0], points[1], points[2], points[3], stroke_color);
         }
     }
 }
 
-fn draw_arrowhead(ctx: &CanvasRenderingContext2d, x1: f64, y1: f64, x2: f64, y2: f64) {
+fn draw_arrowhead(
+    ctx: &CanvasRenderingContext2d,
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    color: &str,
+) {
+    ctx.set_fill_style_str(color);
     let angle = (y2 - y1).atan2(x2 - x1);
     let size = 12.0;
     let a1 = angle + std::f64::consts::PI * 0.85;
@@ -214,17 +212,39 @@ fn draw_arrowhead(ctx: &CanvasRenderingContext2d, x1: f64, y1: f64, x2: f64, y2:
     ctx.fill();
 }
 
-fn draw_freedraw(ctx: &CanvasRenderingContext2d, element: &Element) {
-    if let Some(points) = &element.points {
-        let path = rough_polyline(
-            element.seed,
-            points,
-            element.roughness,
-            element.stroke_width,
-            false,
-        );
-        draw_path(ctx, &path, false);
+fn draw_freedraw_smooth(ctx: &CanvasRenderingContext2d, element: &Element) {
+    let Some(points) = &element.points else { return };
+    if points.len() < 4 {
+        return;
     }
+
+    let pairs: Vec<(f64, f64)> = points
+        .chunks(2)
+        .filter_map(|c| (c.len() == 2).then_some((c[0], c[1])))
+        .collect();
+
+    if pairs.len() < 2 {
+        return;
+    }
+
+    ctx.begin_path();
+    ctx.move_to(pairs[0].0, pairs[0].1);
+
+    if pairs.len() == 2 {
+        ctx.line_to(pairs[1].0, pairs[1].1);
+    } else {
+        for i in 1..pairs.len() - 1 {
+            let (cx, cy) = pairs[i];
+            let (mx, my) = (
+                (cx + pairs[i + 1].0) / 2.0,
+                (cy + pairs[i + 1].1) / 2.0,
+            );
+            ctx.quadratic_curve_to(cx, cy, mx, my);
+        }
+        let last = pairs[pairs.len() - 1];
+        ctx.line_to(last.0, last.1);
+    }
+    ctx.stroke();
 }
 
 fn draw_image(ctx: &CanvasRenderingContext2d, element: &Element, files: &HashMap<String, Value>) {
