@@ -231,6 +231,17 @@ impl Editor {
     pub fn merge_remote(&mut self, remote: Vec<Element>) {
         self.elements = excaildraw_core::reconcile_elements(&self.elements, &remote);
     }
+
+    pub fn adapt_theme_colors(&mut self, to_dark: bool) {
+        for el in self.elements.iter_mut().filter(|e| !e.is_deleted) {
+            let stroke_before = el.stroke_color.clone();
+            let fill_before = el.background_color.clone();
+            crate::theme::adapt_element_colors(el, to_dark);
+            if el.stroke_color != stroke_before || el.background_color != fill_before {
+                el.bump_version();
+            }
+        }
+    }
 }
 
 fn layer_label(e: &Element) -> String {

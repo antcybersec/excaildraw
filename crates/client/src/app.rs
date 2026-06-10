@@ -789,6 +789,9 @@ pub fn app() -> Html {
                     }
                     "toggle-theme" => {
                         theme.borrow_mut().toggle();
+                        let to_dark = theme.borrow().dark;
+                        editor.borrow_mut().adapt_theme_colors(to_dark);
+                        sync_and_persist(&editor);
                         bump_frame();
                     }
                     "collab" => {
