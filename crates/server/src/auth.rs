@@ -20,7 +20,13 @@ pub struct TokenRequest {
 }
 
 pub fn jwt_secret() -> String {
-    std::env::var("JWT_SECRET").unwrap_or_else(|_| "excaildraw-dev-secret-change-me".into())
+    std::env::var("JWT_SECRET").unwrap_or_else(|_| {
+        if cfg!(debug_assertions) {
+            "excaildraw-dev-secret-change-me".into()
+        } else {
+            panic!("JWT_SECRET environment variable must be set in release builds");
+        }
+    })
 }
 
 pub fn issue_token(username: &str) -> Option<TokenResponse> {
