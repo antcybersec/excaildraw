@@ -8,6 +8,9 @@ use wasm_bindgen::JsCast;
 use web_sys::{MessageEvent, WebSocket};
 
 fn api_base() -> String {
+    if let Some(url) = option_env!("API_BASE_URL") {
+        return url.to_string();
+    }
     web_sys::window()
         .and_then(|w| w.location().origin().ok())
         .filter(|origin| !origin.ends_with(":3000"))
